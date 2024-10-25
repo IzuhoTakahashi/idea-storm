@@ -18,6 +18,7 @@ function App() {
   const [selectedParent, setSelectedParent] = useState(null);
   const [backgroundPosition, setBackgroundPosition] = useState('0px 0px');
   const [zoomTransform, setZoomTransform] = useState(d3.zoomIdentity); // ズーム状態を保持
+  const [level1Hue, setLevel1Hue] = useState(0); // レベル1のノードの色相を管理
 
   const inputRef = useRef(null);
   const svgRef = useRef(null);
@@ -25,7 +26,6 @@ function App() {
 
   // 初期色の設定
   const rootColor = '#ffffff';
-  const levelOneColors = chroma.scale(['#ff0000', '#00ff00', '#0000ff', '#ffff00']).mode('lch').colors(10);
 
   // サブメニューの表示状態を管理するための状態変数
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -187,13 +187,19 @@ function App() {
         return; // 親ノードが見つからなければ処理を終了
       }
 
-      // 新しいノードの色を決定
-      const newColor =
-        selectedParent === null
-          ? rootColor
-          : parentNode.level === 0
-          ? levelOneColors[Math.floor(Math.random() * levelOneColors.length)]
-          : chroma(parentNode.color).saturate(-0.2).brighten(0.2).hex();
+      let newColor;
+      if (selectedParent === null) {
+        // レベル0のノードは白
+        newColor = rootColor;
+      } else if (parentNode.level === 0) {
+        // レベル1のノード
+        const hue = level1Hue % 360; // 360を超えた場合は余りを使用
+        newColor = `hsl(${hue}, 80%, 95%)`; // 彩度は80%、明度は90%
+        setLevel1Hue(level1Hue + 66); // 次のノードのために色相を11度増加
+      } else {
+        // レベル2以降は親と同じ色
+        newColor = parentNode.color;
+      }
 
       // 新しいノードオブジェクトを作成
       const newNodeObject = {
@@ -203,10 +209,10 @@ function App() {
         children: [],
         color: newColor,
         level: parentNode ? parentNode.level + 1 : 0,
-        x: parentNode ? parentNode.x + Math.random() * 100 - 50 : 300,
-        y: parentNode ? parentNode.y + Math.random() * 100 - 50 : 300,
-        width: Math.min(20 + newNode.length * 15), // 文字数に応じたノードの幅を設定（最小20px、最大200px）
-        height: 40 // デフォルトの高さ
+        x: parentNode ? parentNode.x + Math.random() * 100 - 50 : window.innerWidth / 2,
+        y: parentNode ? parentNode.y + Math.random() * 100 - 50 : window.innerHeight / 2,
+        width: parentNode ? Math.min(20 + newNode.length * 20) : Math.min(20 + newNode.length * 20) * 2, // レベル0の場合は2倍に
+        height: parentNode ? 45 : 45 * 2 // レベル0の場合は2倍に
       };
 
       setNodes((prevNodes) => {
@@ -237,8 +243,8 @@ function App() {
     if (nodes.length >= 0) {
       // SVG 要素の選択
       const svg = d3.select(svgRef.current);
-      const width = 800;
-      const height = 800;
+      const width = window.innerWidth; // ウィンドウの幅に設定
+      const height = window.innerHeight; // ウィンドウの高さに設定
 
       // 既存の`g`を削除してから再描画する
       svg.selectAll('g').remove();
@@ -279,7 +285,7 @@ function App() {
               )
             )
             .id((d) => d.id)
-            .distance(70)
+            .distance(80)
         )
         .force('charge', d3.forceManyBody().strength(-100))
         .force('center', d3.forceCenter(width / 2, height / 2))
@@ -288,6 +294,14 @@ function App() {
           d3.forceCollide().radius((d) => Math.max(d.width, d.height) / 2 + 10)
         ) // ノードの半径 + マージン
         .on('tick', () => {
+          // レベル0ノードを画面中央に固定
+          nodes.forEach((node) => {
+            if (node.level === 0) {
+              node.x = window.innerWidth / 2;
+              node.y = (window.innerHeight / 2) - 50;
+            }
+          });
+
           // 線を描画（先に描画されるのでノードの下にくる）
           const links = linkGroup
             .selectAll('line')
@@ -306,8 +320,14 @@ function App() {
               )
             )
             .join('line')
-            .attr('stroke', '#000000')
-            .attr('stroke-width', 3)
+            .attr('stroke', (d) => {
+              const [hue, ,] = chroma(d.target.color).hsl();
+              return chroma.hsl(hue, 1, 0.475).hex();
+            })
+            .attr('stroke-width', (d) => {
+              const level = d.source.level;
+              return Math.max(2, 10 - level * 3); // 幅の最小値を1に設定
+            })
             .attr('x1', (d) => d.source.x)
             .attr('y1', (d) => d.source.y)
             .attr('x2', (d) => d.target.x)
@@ -318,13 +338,20 @@ function App() {
             .selectAll('rect')
             .data(nodes)
             .join('rect')
-            .attr('width', (d) => d.width)
-            .attr('height', (d) => d.height)
-            .attr('rx', 10)
-            .attr('ry', 10)
+            .attr('width', (d) => (d.level === 0 ? d.width : d.width))
+            .attr('height', (d) => (d.level === 0 ? d.height : d.height))
+            .attr('rx', (d) => (d.level === 0 ? 30 : 10))
+            .attr('ry', (d) => (d.level === 0 ? 30 : 10))          
             .attr('fill', (d) => d.color)
-            .attr('stroke', '#000000')
-            .attr('stroke-width', 2)
+            .attr('stroke', (d) => {
+              if (d.level === 0) {
+                return '#000000'; // レベル0のノードは薄いグレーの枠線にする
+              } else {
+                const [hue] = chroma(d.color).hsl();
+                return chroma.hsl(hue, 0.8, 0.475).hex();
+              }
+            })
+            .attr('stroke-width', (d) => (d.level === 0 ? 0.5 : 1.2))
             .attr('x', (d) => d.x - d.width / 2)
             .attr('y', (d) => d.y - d.height / 2)
             .attr('cursor', 'pointer')
@@ -341,9 +368,11 @@ function App() {
             .join('text')
             .attr('x', (d) => d.x)
             .attr('y', (d) => d.y) // 少し下にオフセットして、テキストが中央に来るように調整
-            .attr('dy', '0.35em')
             .attr('text-anchor', 'middle')
+            .attr('alignment-baseline', 'middle')
             .attr('fill', '#000000')
+            .style('font-size', (d) => (d.level === 0 ? '24px' : '18px'))
+            .style('font-weight', 'bold')
             .style('white-space', 'pre-wrap')
             .text((d) => d.text)
             .attr('cursor', 'pointer')
@@ -381,9 +410,9 @@ function App() {
           redo();
         }
       };
-  
+
       // キーボードイベントを登録
-      document.addEventListener('keydown', handleKeyDown);  
+      document.addEventListener('keydown', handleKeyDown);
 
       // シミュレーションの終了時に停止
       return () => {
