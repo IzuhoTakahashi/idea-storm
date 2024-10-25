@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .bg-local {
+    background-attachment: local;
+  }
+}
+
+/* グローバルなフォント設定やリセット（必要に応じて） */
+body {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: #ffffff; /* 背景色を白に設定 */
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* カスタムリセット（ブラウザごとの差異を減らしたい場合） */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: normal;
+}
+
+/* カスタムリンクスタイル（必要に応じて） */
+a {
+  text-decoration: none;
+  color: inherit; /* 親要素の色を継承 */
+}
+
+/* 必要な場合にのみカスタムスタイルを追加 */
+button:focus {
+  outline: 2px solid #1a73e8; /* フォーカス時に青いアウトラインを表示 */
+  outline-offset: 2px; /* フォーカスのアウトラインをボタンから少し離す */
+}
