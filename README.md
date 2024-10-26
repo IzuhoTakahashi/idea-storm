@@ -1,6 +1,6 @@
 # Idea Storm
 
-![Idea Stormのサンプル画像](./images/example.jpg)
+![Idea Stormのサンプル画像](./images/exsample.jpg)
 
 アプリページ：https://ideastorm-110cc.web.app/
 
