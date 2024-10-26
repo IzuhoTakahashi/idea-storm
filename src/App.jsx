@@ -23,6 +23,8 @@ function App() {
   const inputRef = useRef(null);
   const svgRef = useRef(null);
   const fileInputRef = useRef(null); // ファイル選択用のref
+  const zoomHandlerRef = useRef(d3.zoom());
+  const zoomTransformRef = useRef(d3.zoomIdentity);
 
   // 初期色の設定
   const rootColor = '#ffffff';
@@ -209,8 +211,8 @@ function App() {
         children: [],
         color: newColor,
         level: parentNode ? parentNode.level + 1 : 0,
-        x: parentNode ? parentNode.x + Math.random() * 100 - 50 : window.innerWidth / 2,
-        y: parentNode ? parentNode.y + Math.random() * 100 - 50 : window.innerHeight / 2,
+        x: parentNode ? parentNode.x : window.innerWidth / 2,
+        y: parentNode ? parentNode.y : window.innerHeight / 2,
         width: parentNode ? Math.min(20 + newNode.length * 20) : Math.min(20 + newNode.length * 20) * 2, // レベル0の場合は2倍に
         height: parentNode ? 45 : 45 * 2 // レベル0の場合は2倍に
       };
@@ -262,7 +264,7 @@ function App() {
       });
 
       // SVG全体にズームとパンを適用
-      svg.call(zoomHandler).call(zoomHandler.transform, zoomTransform);
+      svg.call(zoomHandlerRef.current).call(zoomHandlerRef.current.transform, zoomTransformRef.current);
 
       // 線用のグループ
       const linkGroup = svg.append('g').attr('class', 'links');
@@ -298,7 +300,7 @@ function App() {
           nodes.forEach((node) => {
             if (node.level === 0) {
               node.x = window.innerWidth / 2;
-              node.y = (window.innerHeight / 2) - 50;
+              node.y = window.innerHeight / 2 - 50;
             }
           });
 
@@ -322,11 +324,11 @@ function App() {
             .join('line')
             .attr('stroke', (d) => {
               const [hue, ,] = chroma(d.target.color).hsl();
-              return chroma.hsl(hue, 1, 0.475).hex();
+              return chroma.hsl(hue, 1, 0.45).hex();
             })
             .attr('stroke-width', (d) => {
               const level = d.source.level;
-              return Math.max(2, 10 - level * 3); // 幅の最小値を1に設定
+              return Math.max(2, 12 - level * 4); // 幅の最小値を1に設定
             })
             .attr('x1', (d) => d.source.x)
             .attr('y1', (d) => d.source.y)
@@ -341,20 +343,21 @@ function App() {
             .attr('width', (d) => (d.level === 0 ? d.width : d.width))
             .attr('height', (d) => (d.level === 0 ? d.height : d.height))
             .attr('rx', (d) => (d.level === 0 ? 30 : 10))
-            .attr('ry', (d) => (d.level === 0 ? 30 : 10))          
+            .attr('ry', (d) => (d.level === 0 ? 30 : 10))
             .attr('fill', (d) => d.color)
             .attr('stroke', (d) => {
               if (d.level === 0) {
                 return '#000000'; // レベル0のノードは薄いグレーの枠線にする
               } else {
                 const [hue] = chroma(d.color).hsl();
-                return chroma.hsl(hue, 0.8, 0.475).hex();
+                return chroma.hsl(hue, 0.8, 0.45).hex();
               }
             })
             .attr('stroke-width', (d) => (d.level === 0 ? 0.5 : 1.2))
             .attr('x', (d) => d.x - d.width / 2)
             .attr('y', (d) => d.y - d.height / 2)
             .attr('cursor', 'pointer')
+            .on('dblclick', (event, d) => handleNodeDoubleClick(d))
             .on('click', (event, d) => {
               setSelectedParent(d.id); // ノードがクリックされたらそのIDをselectedParentに設定
               console.log(`Node ${d.id} clicked!`); // デバッグ用
@@ -376,29 +379,13 @@ function App() {
             .style('white-space', 'pre-wrap')
             .text((d) => d.text)
             .attr('cursor', 'pointer')
+            .on('dblclick', (event, d) => handleNodeDoubleClick(d))
             .on('click', (event, d) => {
               setSelectedParent(d.id); // テキストがクリックされたらそのIDをselectedParentに設定
               console.log(`Text ${d.id} clicked!`); // デバッグ用
               inputRef.current.focus(); // ノードクリック後にテキスト入力欄にフォーカス
             });
         });
-
-      // メニュー外でのクリックイベントのみを検知してメニューを閉じる処理
-      const handleClickOutside = (event) => {
-        // メニュー内のクリックを無視するための条件
-        if (fileMenuOpen || editMenuOpen || helpMenuOpen) {
-          // メニュー内の要素
-          const menuElements = document.querySelectorAll('.menu-element');
-          const clickedInsideMenu = Array.from(menuElements).some((element) => element.contains(event.target));
-
-          if (!clickedInsideMenu) {
-            closeAllMenus();
-          }
-        }
-      };
-
-      // クリックイベントをdocumentに追加
-      document.addEventListener('click', handleClickOutside);
 
       const handleKeyDown = (event) => {
         if (event.ctrlKey && event.key === 'z') {
@@ -417,11 +404,35 @@ function App() {
       // シミュレーションの終了時に停止
       return () => {
         simulation.stop();
-        document.removeEventListener('click', handleClickOutside);
         document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [nodes, fileMenuOpen, editMenuOpen, helpMenuOpen, historyIndex, history]);
+  }, [nodes, historyIndex, history]);
+
+  // メニュー外でのクリックイベントのみを検知してメニューを閉じる処理
+  useEffect(() => {
+    // メニュー以外をクリックした時にメニューを閉じる関数
+    const handleClickOutside = (event) => {
+      // メニューが開いているかどうかを確認
+      if (fileMenuOpen || editMenuOpen || helpMenuOpen) {
+        // メニュー内の要素
+        const menuElements = document.querySelectorAll('.menu-element');
+        const clickedInsideMenu = Array.from(menuElements).some((element) => element.contains(event.target));
+
+        if (!clickedInsideMenu) {
+          closeAllMenus();
+        }
+      }
+    };
+
+    // イベントリスナーを追加
+    document.addEventListener('click', handleClickOutside);
+
+    // クリーンアップ関数でイベントリスナーを削除
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [fileMenuOpen, editMenuOpen, helpMenuOpen]);
 
   // ReactコンポーネントのUIを定義
   return (
@@ -503,9 +514,9 @@ function App() {
           <h1 className="text-4xl font-bold absolute left-1/2 transform -translate-x-1/2">Idea Storm</h1>
 
           {/* 右側のボタン */}
-          <div className="menu-element">
+          {/* <div className="menu-element">
             <button className="text-black font-bold">Profile</button>
-          </div>
+          </div> */}
         </div>
       </header>
 
