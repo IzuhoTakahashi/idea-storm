@@ -23,8 +23,8 @@ function App() {
   const inputRef = useRef(null);
   const svgRef = useRef(null);
   const fileInputRef = useRef(null); // ファイル選択用のref
-  const zoomHandlerRef = useRef(d3.zoom());
-  const zoomTransformRef = useRef(d3.zoomIdentity);
+  // const zoomHandlerRef = useRef(d3.zoom());
+  // const zoomTransformRef = useRef(d3.zoomIdentity);
 
   // 初期色の設定
   const rootColor = '#ffffff';
@@ -264,7 +264,7 @@ function App() {
       });
 
       // SVG全体にズームとパンを適用
-      svg.call(zoomHandlerRef.current).call(zoomHandlerRef.current.transform, zoomTransformRef.current);
+      svg.call(zoomHandler).call(zoomHandler.transform, zoomTransform);
 
       // 線用のグループ
       const linkGroup = svg.append('g').attr('class', 'links');
